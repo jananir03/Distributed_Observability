@@ -1,0 +1,221 @@
+
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: observability_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: observability_ingestion
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: observability_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  telemetry_ingestion:
+    build: ./services/telemetry_ingestion
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${TELEMETRY_DATABASE_URL}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  api_gateway:
+    build: ./services/api_gateway
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TRACE_SERVICE_URL: http://trace_processor:8002
+      LOG_SERVICE_URL: http://log_processor:8003
+      METRICS_SERVICE_URL: http://metrics_aggregation:8004
+      ROOT_CAUSE_SERVICE_URL: http://root_cause_analysis:8005
+      OBSERVABILITY_QUERY_SERVICE_URL: http://observability_query:8006
+      ORDER_SERVICE_URL: http://order_service:8007
+      PAYMENT_SERVICE_URL: http://payment_service:8008
+      NOTIFICATION_SERVICE_URL: http://notification_service:8009
+      GATEWAY_TIMEOUT_SECONDS: ${GATEWAY_TIMEOUT_SECONDS:-10}
+    ports:
+      - "8001:8001"
+    depends_on:
+      - trace_processor
+      - log_processor
+      - metrics_aggregation
+      - root_cause_analysis
+      - observability_query
+      - order_service
+      - payment_service
+      - notification_service
+
+  trace_processor:
+    build: ./services/trace_processor
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${TRACE_DATABASE_URL}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8002:8002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  log_processor:
+    build: ./services/log_processor
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${LOG_DATABASE_URL}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8003:8003"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  metrics_aggregation:
+    build: ./services/metrics_aggregation
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${METRICS_DATABASE_URL}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8004:8004"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  root_cause_analysis:
+    build: ./services/root_cause_analysis
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${ROOT_CAUSE_DATABASE_URL}
+      TRACE_SERVICE_URL: http://trace_processor:8002
+      LOG_SERVICE_URL: http://log_processor:8003
+      METRICS_SERVICE_URL: http://metrics_aggregation:8004
+    ports:
+      - "8005:8005"
+    depends_on:
+      - trace_processor
+      - log_processor
+      - metrics_aggregation
+      - mysql
+
+  observability_query:
+    build: ./services/observability_query
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TRACE_SERVICE_URL: http://trace_processor:8002
+      LOG_SERVICE_URL: http://log_processor:8003
+      METRICS_SERVICE_URL: http://metrics_aggregation:8004
+      ROOT_CAUSE_SERVICE_URL: http://root_cause_analysis:8005
+      QUERY_TIMEOUT_SECONDS: ${QUERY_TIMEOUT_SECONDS:-10}
+    ports:
+      - "8006:8006"
+    depends_on:
+      - trace_processor
+      - log_processor
+      - metrics_aggregation
+      - root_cause_analysis
+
+  order_service:
+    build: ./services/order_service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${ORDER_DATABASE_URL}
+      PAYMENT_SERVICE_URL: http://payment_service:8008
+      NOTIFICATION_SERVICE_URL: http://notification_service:8009
+      TELEMETRY_INGESTION_URL: http://telemetry_ingestion:8000
+    ports:
+      - "8007:8007"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      payment_service:
+        condition: service_started
+      notification_service:
+        condition: service_started
+
+  payment_service:
+    build: ./services/payment_service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${PAYMENT_DATABASE_URL}
+      TELEMETRY_INGESTION_URL: http://telemetry_ingestion:8000
+    ports:
+      - "8008:8008"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  notification_service:
+    build: ./services/notification_service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${NOTIFICATION_DATABASE_URL}
+      TELEMETRY_INGESTION_URL: http://telemetry_ingestion:8000
+    ports:
+      - "8009:8009"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  rabbitmq_data:

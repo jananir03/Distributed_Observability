@@ -1,0 +1,107 @@
+# ==============================
+# Distributed Observability Platform
+# ==============================
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Python cache / compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+.eggs/
+*.egg-info/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+
+# Python test / coverage / type-checker caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs / runtime files
+*.log
+logs/
+log/
+*.pid
+*.seed
+
+# Local databases and database dumps
+*.sqlite
+*.sqlite3
+*.db
+*.sql.gz
+*.dump
+*.bak
+*.backup
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+.npm/
+*.tsbuildinfo
+
+# Frontend environment files (Vite)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Docker local overrides and generated data
+docker-compose.override.yml
+# Do not commit local persistent data directories if added later:
+mysql-data/
+rabbitmq-data/
+data/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary / archive files
+*.tmp
+*.temp
+*.orig
+*.rej
+*.zip
+
+# Keep useful project files tracked
+!.gitignore
+!README*
+!**/README*
